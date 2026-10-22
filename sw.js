@@ -1,4 +1,4 @@
-const CACHE = 'bar-ledger-v2';
+const CACHE = 'bar-ledger-v3';
 const ASSETS = [
   './', './index.html', './manifest.webmanifest',
   './icon-192.png', './icon-512.png', './apple-touch-icon.png'
@@ -13,15 +13,16 @@ self.addEventListener('activate', e => {
       .then(() => self.clients.claim())
   );
 });
+// network first: a fresh copy is used when online, the cached copy only when offline
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   const url = new URL(e.request.url);
   if (url.origin !== self.location.origin) return;
   e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
+    fetch(e.request).then(res => {
       const copy = res.clone();
       caches.open(CACHE).then(c => c.put(e.request, copy));
       return res;
-    })).catch(() => caches.match('./index.html'))
+    }).catch(() => caches.match(e.request).then(h => h || caches.match('./index.html')))
   );
 });
