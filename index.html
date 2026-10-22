@@ -19,7 +19,7 @@
 <body>
 <style>
 /* Layout: one vertical page. Brand header, summary, then numbered sections in order:
-   1 purchases, 2 deliveries, 3 daily report, 4 monthly report, 5 profit and charts, 6 settings. */
+   1 purchases, 2 deliveries, 3 daily, 4 monthly, 5 invoices with photos, 6 charts, 7 settings. */
 :root{
   --bg:#0b1012;--panel:#121a1e;--panel2:#18232a;--line:#22313a;--line2:#2c3e49;
   --fg:#eef2ef;--muted:#8fa0a8;--gold:#c8a660;--gold2:#e9d7a3;
@@ -79,6 +79,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .grid3>*,.grid2>*{min-width:0}
 label{display:grid;gap:6px;font-size:12px;color:var(--muted);min-width:0}
 input,select,textarea{width:100%;min-width:0;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;outline:none}
+input[type=file]{padding:8px;font-size:12px}
 input:focus,select:focus{border-color:var(--gold)}
 .preview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
 .preview span{display:block;color:var(--muted);font-size:11px}
@@ -102,6 +103,9 @@ summary{cursor:pointer;color:var(--gold2);font-size:12px}
 .rev{font-size:12px;color:var(--muted);margin-top:6px;display:grid;gap:4px;border-top:1px dashed var(--line2);padding-top:6px}
 .rev s{color:var(--muted)}
 .empty{text-align:center;color:var(--muted);padding:22px 8px;border:1px dashed var(--line2);border-radius:14px}
+.inv-cmp{display:grid;grid-template-columns:1fr 1fr;gap:10px;background:var(--panel2);border-radius:12px;padding:10px}
+.inv-cmp>div{min-width:0;display:grid;gap:2px}
+.inv-cmp b{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 
 /* tables */
 .tbl{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
@@ -124,7 +128,7 @@ tfoot td{font-weight:800;background:#0f171b}
 .dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-inline-end:6px;vertical-align:middle}
 .dot.b{background:var(--buy)} .dot.d{background:var(--deliver)}
 
-/* toast + ask */
+/* overlays */
 .overlay{position:fixed;inset:0;background:#000b;display:flex;align-items:center;justify-content:center;z-index:20;padding:20px}
 .overlay[hidden]{display:none}
 .dialog{background:var(--panel);border:1px solid var(--line2);border-radius:16px;padding:18px;max-width:420px;width:100%}
@@ -182,8 +186,14 @@ textarea.mono{direction:ltr;font-size:12px;min-height:110px;width:100%;backgroun
   <div class="tbl" id="tbl-monthly"></div>
 </section>
 
+<section class="section" id="s-invoices">
+  <div class="sec-h"><span class="step">۵</span><h2>فاکتورهای ثبت‌شده</h2><span class="sub">عکس و مبلغ فاکتورها، همراه با بررسی اختلاف</span></div>
+  <div class="kpis" id="inv-sum" style="margin-bottom:0"></div>
+  <div class="list" id="inv-list"></div>
+</section>
+
 <section class="section" id="s-pl">
-  <div class="sec-h"><span class="step">۵</span><h2>سود و زیان و نمودار</h2></div>
+  <div class="sec-h"><span class="step">۶</span><h2>سود و زیان و نمودار</h2></div>
   <div class="charts">
     <div class="card chart-card">
       <h3>خرید و تحویل ماهانه</h3>
@@ -199,13 +209,14 @@ textarea.mono{direction:ltr;font-size:12px;min-height:110px;width:100%;backgroun
 </section>
 
 <section class="section" id="s-settings">
-  <div class="sec-h"><span class="step">۶</span><h2>تنظیمات و پشتیبان</h2></div>
+  <div class="sec-h"><span class="step">۷</span><h2>تنظیمات و پشتیبان</h2></div>
   <div class="card form">
     <div class="grid2">
       <label>حجم هر بشکه (لیتر)<input id="sBarrel" type="text" inputmode="decimal"></label>
       <div class="lbl" style="align-self:end">تغییر این عدد روی تراکنش‌های ثبت‌شده هم اثر می‌گذارد، چون مقدار هر تراکنش بر حسب بشکه و لیتر ذخیره شده است.</div>
     </div>
     <label>پشتیبان (کپی کنید و نگه دارید)<textarea id="sExport" class="mono" readonly></textarea></label>
+    <div class="lbl">عکس‌های فاکتور داخل این متن نیستند، چون حجم زیادی دارند و جداگانه نگهداری می‌شوند.</div>
     <div class="acts"><button class="btn" id="btnCopy">کپی پشتیبان</button></div>
     <label>بازیابی از پشتیبان<textarea id="sImport" class="mono" placeholder="متن پشتیبان را اینجا بچسبانید"></textarea></label>
     <div class="acts">
@@ -225,8 +236,16 @@ textarea.mono{direction:ltr;font-size:12px;min-height:110px;width:100%;backgroun
   </div>
 </div>
 
+<div class="overlay" id="photoOverlay" hidden>
+  <div class="dialog" style="max-width:520px">
+    <div class="row" style="justify-content:space-between;margin-bottom:10px"><b>عکس فاکتور</b><button class="btn ghost" id="photoClose">بستن</button></div>
+    <img id="photoImg" alt="عکس فاکتور" style="width:100%;height:auto;border-radius:10px;display:block">
+  </div>
+</div>
+
 <script>
 const KEY='bar-ledger-v2';
+const IDB_NAME='bar-ledger-photos';
 const F=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const NF=new Intl.NumberFormat('fa-IR',{maximumFractionDigits:2});
@@ -249,12 +268,14 @@ const shortDate=s=>{try{return SDF.format(new Date(s+'T12:00:00'))}catch(e){retu
 const monthName=k=>{try{return MF.format(new Date(k+'-15T12:00:00'))}catch(e){return k}};
 const monthShort=k=>{try{return MSF.format(new Date(k+'-15T12:00:00'))}catch(e){return k}};
 const TYPE={buy:'خرید',deliver:'تحویل'};
-const LBL={type:'نوع',date:'تاریخ',product:'محصول',party:'طرف حساب',barrels:'بشکه',liters:'لیتر',price:'قیمت',priceUnit:'واحد قیمت',note:'یادداشت'};
+const LBL={type:'نوع',date:'تاریخ',product:'محصول',party:'طرف حساب',barrels:'بشکه',liters:'لیتر',price:'قیمت',priceUnit:'واحد قیمت',invoiceAmount:'مبلغ فاکتور',note:'یادداشت'};
 
 let db=load();
 let editing={buy:null,deliver:null};
+let pending={buy:null,deliver:null}; // compressed photo waiting to be saved with the next save
 let pendingOk=null;
-let LG=null; // ledger snapshot for current render
+let LG=null;
+let photoURLs=[];
 
 function load(){
   try{
@@ -283,7 +304,6 @@ function amountOf(t){
   const L=litersOf(t);
   return (t.priceUnit==='bbl'?L/db.barrelL:L)*(+t.price||0);
 }
-/* "۱ بشکه و ۷۰ لیتر" style text for a liter total */
 function fmtQty(L){
   const B=db.barrelL;
   const bar=Math.floor(L/B+1e-9);
@@ -301,9 +321,71 @@ function toast(msg){
   const el=document.createElement('div');
   el.className='toast';el.textContent=msg;
   document.body.appendChild(el);
-  setTimeout(()=>el.remove(),2600);
+  setTimeout(()=>el.remove(),2800);
 }
 function err(msg){toast(msg);return null}
+
+/* photos: stored in IndexedDB, separate from the ledger data */
+function idbOpen(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open(IDB_NAME,1);
+    r.onupgradeneeded=()=>{r.result.createObjectStore('photos')};
+    r.onsuccess=()=>res(r.result);
+    r.onerror=()=>rej(r.error);
+  });
+}
+async function photoOp(mode,fn){
+  const d=await idbOpen();
+  try{
+    return await new Promise((res,rej)=>{
+      const tx=d.transaction('photos',mode);
+      const req=fn(tx.objectStore('photos'));
+      tx.oncomplete=()=>res(req?req.result:undefined);
+      tx.onerror=()=>rej(tx.error);
+      tx.onabort=()=>rej(tx.error);
+    });
+  }finally{d.close()}
+}
+const photoPut=(id,blob)=>photoOp('readwrite',s=>s.put(blob,id));
+const photoGet=id=>photoOp('readonly',s=>s.get(id));
+const photoDel=id=>photoOp('readwrite',s=>s.delete(id));
+const photoClearAll=()=>photoOp('readwrite',s=>s.clear());
+
+/* shrink a camera photo to about 1600px, JPEG, so each one stays small */
+function compressImage(file){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      const max=1600;
+      const s=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+      const w=Math.max(1,Math.round(img.naturalWidth*s));
+      const h=Math.max(1,Math.round(img.naturalHeight*s));
+      const c=document.createElement('canvas');
+      c.width=w;c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      c.toBlob(b=>{URL.revokeObjectURL(url);b?res(b):rej(new Error('encode'))},'image/jpeg',0.72);
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);rej(new Error('decode'))};
+    img.src=url;
+  });
+}
+async function openPhoto(id){
+  try{
+    const blob=await photoGet(id);
+    if(!blob) return toast('عکسی برای این تراکنش پیدا نشد');
+    const url=URL.createObjectURL(blob);
+    photoURLs.push(url);
+    F('photoImg').src=url;
+    F('photoOverlay').hidden=false;
+  }catch(e){toast('خواندن عکس ممکن نیست')}
+}
+function closePhoto(){
+  F('photoOverlay').hidden=true;
+  F('photoImg').removeAttribute('src');
+  photoURLs.forEach(u=>URL.revokeObjectURL(u));
+  photoURLs=[];
+}
 
 /* ledger: weighted-average cost, confirmed transactions only, in date order */
 function ledger(){
@@ -337,7 +419,6 @@ function ledger(){
   };
 }
 
-/* grouping for daily and monthly reports */
 function groupBy(keyFn){
   const g={};
   for(const t of LG.list){
@@ -351,14 +432,12 @@ function groupBy(keyFn){
   }
   return Object.values(g).sort((a,b)=>a.k.localeCompare(b.k));
 }
-
 function sumRows(rows){
   return rows.reduce((s,r)=>({
     n:s.n+r.n,buyL:s.buyL+r.buyL,delL:s.delL+r.delL,
     buyAmt:s.buyAmt+r.buyAmt,delAmt:s.delAmt+r.delAmt,profit:s.profit+r.profit
   }),{n:0,buyL:0,delL:0,buyAmt:0,delAmt:0,profit:0});
 }
-
 function reportTable(rows,labelFn,labelHead){
   if(!rows.length) return '<div class="empty">هنوز تراکنش تأییدشده‌ای ثبت نشده است.</div>';
   const shown=[...rows].reverse();
@@ -403,9 +482,7 @@ function monthlyBarChart(groups){
       `<rect class="bd" x="${(cx+3).toFixed(1)}" y="${(pt+ih-hd).toFixed(1)}" width="${bw}" height="${hd.toFixed(1)}" rx="5"/>`+
       `<text x="${cx.toFixed(1)}" y="${H-12}" text-anchor="middle">${monthShort(g.k)}</text>`;
   }).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="نمودار خرید و تحویل ماهانه">
-    <defs><linearGradient id="fadeG" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:var(--gold)" stop-opacity=".2"/><stop offset="1" style="stop-color:var(--gold)" stop-opacity="0"/></linearGradient></defs>
-    ${grid}${bars}</svg>
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="نمودار خرید و تحویل ماهانه">${grid}${bars}</svg>
     <div class="legend"><span><i class="dot b"></i>مبلغ خرید</span><span><i class="dot d"></i>مبلغ تحویل</span></div>`;
 }
 function profitLineChart(points){
@@ -426,8 +503,6 @@ function profitLineChart(points){
   const area=`${d} L${X(points.length-1).toFixed(1)},${Y(0).toFixed(1)} L${X(0).toFixed(1)},${Y(0).toFixed(1)} Z`;
   const last=points[points.length-1];
   const lx=X(points.length-1), ly=Y(last.v);
-  const xl=`<text x="${pl}" y="${H-12}" text-anchor="start">${points[0].label}</text>
-    <text x="${W-pr}" y="${H-12}" text-anchor="end">${last.label}</text>`;
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="روند سود و زیان تجمعی">
     <defs><linearGradient id="fadeP" x1="0" x2="0" y1="0" y2="1"><stop offset="0" style="stop-color:var(--gold)" stop-opacity=".28"/><stop offset="1" style="stop-color:var(--gold)" stop-opacity="0"/></linearGradient></defs>
     ${grid}
@@ -436,7 +511,8 @@ function profitLineChart(points){
     <path class="lineP" d="${d}"/>
     <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="5" style="fill:var(--gold);stroke:var(--bg);stroke-width:2"/>
     <text x="${(lx-10).toFixed(1)}" y="${(ly-12).toFixed(1)}" text-anchor="end" style="fill:var(--gold2);font-weight:800">${shortMoney(last.v)}</text>
-    ${xl}</svg>`;
+    <text x="${pl}" y="${H-12}" text-anchor="start">${points[0].label}</text>
+    <text x="${W-pr}" y="${H-12}" text-anchor="end">${last.label}</text></svg>`;
 }
 
 /* forms */
@@ -463,6 +539,11 @@ function formHTML(type){
       </label>
       <label>یادداشت<input id="${p}note" type="text"></label>
     </div>
+    <div class="grid2">
+      <label>مبلغ کل فاکتور (تومان، اختیاری)<input id="${p}invAmt" type="text" inputmode="decimal" placeholder="برای بررسی اختلاف"></label>
+      <label>عکس فاکتور (اختیاری)<input id="${p}photo" data-photo-in="${type}" type="file" accept="image/*" capture="environment"></label>
+    </div>
+    <div class="lbl" id="${p}photoInfo"></div>
     <div class="preview" id="${p}preview"></div>
     <label id="${p}reasonBox" hidden>دلیل ویرایش (الزامی)<input id="${p}reason" type="text" placeholder="مثلاً اصلاح مقدار طبق بارنامه"></label>
     <div class="acts">
@@ -483,6 +564,7 @@ function readForm(type){
     liters:parseNum(F(p+'liters').value),
     price:parseNum(F(p+'price').value),
     priceUnit:F(p+'priceUnit').value,
+    invoiceAmount:Math.max(0,parseNum(F(p+'invAmt').value)),
     note:F(p+'note').value.trim()
   };
   if(!v.date) return err('تاریخ را وارد کنید');
@@ -512,8 +594,12 @@ function fillForm(type,t){
   F(p+'liters').value=t?(t.liters||''):'';
   F(p+'price').value=t?t.price:'';
   F(p+'priceUnit').value=t?t.priceUnit:'lit';
+  F(p+'invAmt').value=t&&t.invoiceAmount?t.invoiceAmount:'';
   F(p+'note').value=t?t.note:'';
   F(p+'reason').value='';
+  F(p+'photo').value='';
+  pending[type]=null;
+  F(p+'photoInfo').textContent=t&&t.hasPhoto?'این تراکنش عکس فاکتور دارد. برای جایگزینی، عکس جدید انتخاب کنید.':'';
   const locked=!!(t&&t.status==='confirmed');
   F(p+'reasonBox').hidden=!locked;
   F(p+'mode').textContent=t?(locked?'ویرایش تأییدشده':'ویرایش پیش‌نویس'):(type==='buy'?'خرید جدید':'تحویل جدید');
@@ -527,13 +613,13 @@ function clearForm(type){
   fillForm(type,null);
 }
 function snap(t){
-  return {type:t.type,date:t.date,product:t.product,party:t.party,barrels:t.barrels,liters:t.liters,price:t.price,priceUnit:t.priceUnit,note:t.note};
+  return {type:t.type,date:t.date,product:t.product,party:t.party,barrels:t.barrels,liters:t.liters,price:t.price,priceUnit:t.priceUnit,invoiceAmount:t.invoiceAmount||0,note:t.note};
 }
 function showVal(k,v){
   if(k==='type') return TYPE[v]||'—';
   if(k==='priceUnit') return v==='bbl'?'بشکه':'لیتر';
   if(k==='barrels'||k==='liters') return fmt(v||0);
-  if(k==='price') return money(v);
+  if(k==='price'||k==='invoiceAmount') return money(v||0);
   return esc(v||'—');
 }
 function diffRows(before,after){
@@ -544,32 +630,41 @@ function diffRows(before,after){
 }
 
 /* actions */
-function saveTx(type,mode){
+async function saveTx(type,mode){
   const v=readForm(type);
   if(!v) return;
   const now=Date.now();
   const id=editing[type];
+  const blob=pending[type];
+  const reason=mode==='edit'?F(type+'-reason').value.trim():'';
+  if(mode==='edit'&&reason.length<3) return err('دلیل ویرایش را بنویسید');
+
+  const txId=id||(now+'-'+Math.random().toString(36).slice(2,7));
+  if(blob){
+    try{await photoPut(txId,blob)}
+    catch(e){return err('ذخیره‌ی عکس انجام نشد. تراکنش ذخیره نشد.')}
+  }
+
   if(mode==='edit'){
-    const reason=F(type+'-reason').value.trim();
-    if(reason.length<3) return err('دلیل ویرایش را بنویسید');
-    const t=db.txs.find(x=>x.id===id);
+    const t=db.txs.find(x=>x.id===txId);
     if(!t) return;
     const before=snap(t);
-    Object.assign(t,v,{updatedAt:now});
+    Object.assign(t,v,{updatedAt:now,hasPhoto:!!(t.hasPhoto||blob)});
     t.revisions=t.revisions||[];
     t.revisions.push({at:now,reason,before,after:snap(t)});
   }else{
     const status=mode==='final'?'confirmed':'draft';
-    if(id){
-      const t=db.txs.find(x=>x.id===id);
-      Object.assign(t,v,{status,updatedAt:now});
-      if(status==='confirmed'&&!t.confirmedAt) t.confirmedAt=now;
+    const ex=id?db.txs.find(x=>x.id===id):null;
+    if(ex){
+      Object.assign(ex,v,{status,updatedAt:now,hasPhoto:!!(ex.hasPhoto||blob)});
+      if(status==='confirmed'&&!ex.confirmedAt) ex.confirmedAt=now;
     }else{
-      db.txs.push({id:now+'-'+Math.random().toString(36).slice(2,7),...v,status,createdAt:now,updatedAt:now,confirmedAt:status==='confirmed'?now:null,revisions:[]});
+      db.txs.push({id:txId,...v,status,createdAt:now,updatedAt:now,confirmedAt:status==='confirmed'?now:null,revisions:[],hasPhoto:!!blob});
     }
   }
   db.lastProduct=v.product;
   save();
+  pending[type]=null;
   clearForm(type);
   render();
   toast(mode==='final'?'تأیید نهایی شد':mode==='edit'?'ویرایش با دلیل ثبت شد':'پیش‌نویس ذخیره شد');
@@ -591,7 +686,9 @@ function confirmTx(id){
 }
 function deleteTx(id){
   askConfirm('این پیش‌نویس حذف شود؟','حذف',()=>{
+    const t=db.txs.find(x=>x.id===id);
     db.txs=db.txs.filter(x=>x.id!==id);
+    if(t&&t.hasPhoto) photoDel(id).catch(()=>{});
     if(editing.buy===id) clearForm('buy');
     if(editing.deliver===id) clearForm('deliver');
     save();render();toast('حذف شد');
@@ -626,10 +723,11 @@ function txCard(t){
     <div class="row">
       <span class="pill ${t.type}">${TYPE[t.type]}</span>
       <span class="pill ${confirmed?'confirmed':'draft'}">${confirmed?'تأیید نهایی':'پیش‌نویس'}</span>
+      ${t.hasPhoto?'<span class="pill confirmed">عکس فاکتور</span>':''}
       <span class="grow"></span><span class="lbl">${dateStr(t.date)}</span>
     </div>
     <div class="ttl">${esc(t.product)}${t.party?` · ${esc(t.party)}`:''}</div>
-    <div class="meta">${fmtInput(t)} = <b>${fmt(L)} لیتر</b> · ${money(t.price)} به‌ازای ${t.priceUnit==='bbl'?'بشکه':'لیتر'} · مبلغ <b>${money(amt)}</b></div>
+    <div class="meta">${fmtInput(t)} = <b>${fmt(L)} لیتر</b> · ${money(t.price)} به‌ازای ${t.priceUnit==='bbl'?'بشکه':'لیتر'} · مبلغ <b>${money(amt)}</b>${t.invoiceAmount?` · فاکتور <b>${money(t.invoiceAmount)}</b>`:''}</div>
     ${profitLine}
     ${t.note?`<div class="meta">یادداشت: ${esc(t.note)}</div>`:''}
     <div class="acts">${acts}</div>
@@ -637,12 +735,6 @@ function txCard(t){
   </article>`;
 }
 
-function stockParts(L){
-  const B=db.barrelL;
-  const bar=Math.floor(L/B+1e-9);
-  const rem=Math.round((L-bar*B)*100)/100;
-  return `<div class="sp"><b>${fmt(bar)}</b><span>بشکه</span></div><div class="sp"><b>${fmt(rem)}</b><span>لیتر</span></div>`;
-}
 function renderSummary(){
   const B=db.barrelL;
   const drafts=db.txs.filter(t=>t.status==='draft').length;
@@ -657,12 +749,54 @@ function renderSummary(){
     `<div class="card kpi"><div class="lbl">پیش‌نویس در انتظار تأیید</div><div class="val warn">${fmt(drafts)}</div></div>`
   ].join('');
 }
+function stockParts(L){
+  const B=db.barrelL;
+  const bar=Math.floor(L/B+1e-9);
+  const rem=Math.round((L-bar*B)*100)/100;
+  return `<div class="sp"><b>${fmt(bar)}</b><span>بشکه</span></div><div class="sp"><b>${fmt(rem)}</b><span>لیتر</span></div>`;
+}
 
 function renderLists(){
   for(const type of ['buy','deliver']){
     const items=db.txs.filter(t=>t.type===type).sort(sortDesc);
     F('list-'+type).innerHTML=items.length?items.map(txCard).join(''):'<div class="empty">هنوز تراکنشی ثبت نشده است.</div>';
   }
+}
+
+function renderInvoices(){
+  const items=db.txs.filter(t=>t.hasPhoto||(+t.invoiceAmount>0)).sort(sortDesc);
+  let total=0, photos=0, mismatch=0;
+  const rows=items.map(t=>{
+    const inv=+t.invoiceAmount||0, amt=amountOf(t);
+    total+=inv;
+    if(t.hasPhoto) photos++;
+    const diff=inv>0?Math.abs(inv-amt):0;
+    const bad=inv>0&&diff>Math.max(1000,amt*0.01);
+    if(bad) mismatch++;
+    return `<article class="card tx">
+      <div class="row">
+        <span class="pill ${t.type}">${TYPE[t.type]}</span>
+        <span class="pill ${t.status==='confirmed'?'confirmed':'draft'}">${t.status==='confirmed'?'تأیید نهایی':'پیش‌نویس'}</span>
+        <span class="grow"></span><span class="lbl">${dateStr(t.date)}</span>
+      </div>
+      <div class="ttl">${esc(t.product)}${t.party?` · ${esc(t.party)}`:''}</div>
+      <div class="inv-cmp">
+        <div><span class="lbl">مبلغ فاکتور</span><b>${inv?money(inv):'ثبت نشده'}</b></div>
+        <div><span class="lbl">مبلغ تراکنش</span><b>${money(amt)}</b></div>
+      </div>
+      ${bad?`<div class="warn">اختلاف: ${money(diff)}</div>`:''}
+      <div class="acts">
+        ${t.hasPhoto?`<button class="btn" data-photo="${t.id}">مشاهده عکس</button>`:'<span class="lbl">بدون عکس</span>'}
+        <button class="btn" data-act="edit" data-id="${t.id}">ویرایش</button>
+      </div>
+    </article>`;
+  }).join('');
+  F('inv-sum').innerHTML=items.length?[
+    `<div class="card kpi hero"><div class="lbl">جمع کل مبلغ فاکتورها</div><div class="val">${money(total)}</div><div class="lbl">${fmt(items.length)} فاکتور ثبت‌شده</div></div>`,
+    `<div class="card kpi"><div class="lbl">عکس فاکتور</div><div class="val">${fmt(photos)}</div></div>`,
+    `<div class="card kpi"><div class="lbl">اختلاف با تراکنش</div><div class="val ${mismatch?'warn':'ok'}">${fmt(mismatch)}</div></div>`
+  ].join(''):'';
+  F('inv-list').innerHTML=items.length?rows:'<div class="empty">هنوز فاکتوری با عکس یا مبلغ ثبت نشده است. هنگام ثبت خرید یا تحویل، عکس یا مبلغ فاکتور را اضافه کنید.</div>';
 }
 
 function renderCharts(){
@@ -677,19 +811,21 @@ function render(){
   LG=ledger();
   renderSummary();
   renderLists();
-  F('tbl-daily').innerHTML=reportTable(groupBy(d=>d),shortDateFull,'روز');
+  F('tbl-daily').innerHTML=reportTable(groupBy(d=>d),dateStr,'روز');
   F('tbl-monthly').innerHTML=reportTable(groupBy(d=>d.slice(0,7)),monthName,'ماه');
+  renderInvoices();
   renderCharts();
   F('sExport').value=JSON.stringify(db,null,2);
 }
-function shortDateFull(k){return dateStr(k)}
 
 /* events */
 document.addEventListener('click',e=>{
-  const save_=e.target.closest('[data-save]');
-  if(save_){saveTx(save_.dataset.type,save_.dataset.save);return}
-  const reset=e.target.closest('[data-reset]');
-  if(reset){clearForm(reset.dataset.reset);return}
+  const sv=e.target.closest('[data-save]');
+  if(sv){saveTx(sv.dataset.type,sv.dataset.save);return}
+  const rs=e.target.closest('[data-reset]');
+  if(rs){clearForm(rs.dataset.reset);return}
+  const ph=e.target.closest('[data-photo]');
+  if(ph){openPhoto(ph.dataset.photo);return}
   const act=e.target.closest('[data-act]');
   if(act){
     const id=act.dataset.id;
@@ -702,10 +838,27 @@ document.addEventListener('input',e=>{
   const f=e.target.closest('[data-form]');
   if(f) updatePreview(f.dataset.form);
 });
-document.addEventListener('change',e=>{
-  const f=e.target.closest('[data-form]');
+document.addEventListener('change',async e=>{
+  const inp=e.target;
+  if(inp.dataset&&inp.dataset.photoIn){
+    const type=inp.dataset.photoIn, info=F(type+'-photoInfo');
+    const file=inp.files&&inp.files[0];
+    if(!file){pending[type]=null;info.textContent='';return}
+    info.textContent='در حال فشرده‌سازی عکس…';
+    try{
+      pending[type]=await compressImage(file);
+      info.textContent=`عکس آماده است (حدود ${Math.max(1,Math.round(pending[type].size/1024))} کیلوبایت)`;
+    }catch(ex){
+      pending[type]=null;inp.value='';info.textContent='';
+      toast('این عکس خوانده نشد. عکس دیگری انتخاب کنید');
+    }
+    return;
+  }
+  const f=inp.closest&&inp.closest('[data-form]');
   if(f) updatePreview(f.dataset.form);
 });
+F('photoClose').addEventListener('click',closePhoto);
+F('photoOverlay').addEventListener('click',e=>{if(e.target.id==='photoOverlay')closePhoto()});
 F('askOk').addEventListener('click',()=>{
   F('ask').hidden=true;
   const cb=pendingOk;pendingOk=null;
@@ -731,8 +884,10 @@ F('btnImport').addEventListener('click',()=>{
   }catch(e){toast('متن پشتیبان معتبر نیست')}
 });
 F('btnReset').addEventListener('click',()=>{
-  askConfirm('همه تراکنش‌ها پاک شوند؟ این کار برگشت ندارد.','پاک کردن',()=>{
-    db={barrelL:db.barrelL,txs:[]};save();clearForm('buy');clearForm('deliver');render();toast('داده‌ها پاک شد');
+  askConfirm('همه تراکنش‌ها و عکس‌های فاکتور پاک شوند؟ این کار برگشت ندارد.','پاک کردن',async()=>{
+    db={barrelL:db.barrelL,txs:[]};save();clearForm('buy');clearForm('deliver');
+    try{await photoClearAll()}catch(e){}
+    render();toast('داده‌ها پاک شد');
   });
 });
 
@@ -741,7 +896,6 @@ F('form-buy-wrap').innerHTML=formHTML('buy');
 F('form-deliver-wrap').innerHTML=formHTML('deliver');
 clearForm('buy');clearForm('deliver');
 F('sBarrel').value=db.barrelL;
-F('sExport').value=JSON.stringify(db,null,2);
 render();
 </script>
 
